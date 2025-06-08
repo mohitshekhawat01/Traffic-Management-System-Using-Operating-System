@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Traffic Management System</title>
+    <style>
+        body {
+            background-color: #f4f4f4; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #333333;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding-top: 20px;
+        }
+
+        h1 {
+            margin: 20px;
+            font-weight: bold;
+            text-decoration: underline;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .controls button {
+            border: 2px solid; 
+            color: white;
+            padding: 8px 13px; 
+            margin: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        .controls button {
+            background-color: #008CBA;
+            border-color: #005f75;
+        }
+        .controls button:hover {
+            background-color: #005f75;
+            border-color: #004c5f;
+        }
+
+        .controls button.emergency-spawn {
+            background-color: #c0392b;
+            border-color: #a93226;
+        }
+        .controls button.emergency-spawn:hover {
+            background-color: #a93226;
+            border-color: #8a2a20;
+        }
+        .controls button.pedestrian-request {
+            background-color: #27ae60;
+            border-color: #229954;
+        }
+        .controls button.pedestrian-request:hover {
+            background-color: #229954;
+            border-color: #1e8449;
+        }
+
+        .controls button:disabled {
+            background-color: #cccccc;
+            border-color: #aaaaaa;
+            cursor: not-allowed;
+        }
+
+        .intersection-container {
+            position: relative;
+            padding: 40px; 
+            background-color: #228B22; 
+            border-radius: 10px; 
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        }
+
+        .intersection {
+            position: relative;
+            width: 500px; 
+            height: 500px;
+            background-color: #707070;
+            border: 2px solid #555;
+        }
+
+        .road {
+            position: absolute;
+            background-color: #505050;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .horizontal {
+            width: 500px;
+            height: 120px;
+            top: 190px;    
+            left: 0;
+            flex-direction: column;
+        }
+
+        .vertical {
+            width: 120px;
+            height: 500px;
+            top: 0;
+            left: 190px;   
+            flex-direction: row;
+        }
+
+        .road-line { background-color: white; }
+        .road-line.horizontal-line { width: 30px; height: 4px; margin: 10px 0; }
+        .road-line.vertical-line { width: 4px; height: 30px; margin: 0 10px; }
+        .horizontal .road-line-segment, .vertical .road-line-segment { display: flex; }
+        .vertical .road-line-segment { flex-direction: column; }
+
+        .zebra-crossing {
+            position: absolute;
+            top: 315px;    
+            left: 190px;   
+            width: 120px;
+            height: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            z-index: 1;
+        }
+        .zebra-stripe { width: 100%; height: 6px; background-color: white; }
+
+        .traffic-light {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background-color: red;
+            position: absolute;
+            border: 2px solid #444;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+            z-index: 20;
+        }
+
+        #north-light { 
+            top: calc(190px - 35px);
+            left: calc(190px - 30px);
+        }
+        #south-light { 
+            top: calc(310px + 10px);
+            left: calc(310px + 5px);
+        }
+        #east-light  { 
+            top: calc(190px - 30px);
+            left: calc(310px + 10px);
+        }
+        #west-light  { 
+            top: calc(310px + 5px);
+            left: calc(190px - 35px);
+        }
+
+
+        #vehicle-container, #pedestrian-container {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+        }
+
+        .vehicle {
+            position: absolute;
+            background-color: blue; border: 1px solid black;
+            box-sizing: border-box; z-index: 10; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 10px;
+        }
+        .emergency-vehicle { z-index: 15; border: 2px solid gold; }
+        .ambulance { background-color: #ecf0f1; color: #c0392b; border: 2px solid #c0392b; }
+        .firetruck { background-color: #e74c3c; color: white; border: 2px solid #2c3e50; }
+
+        .pedestrian {
+            position: absolute;
+            width: 15px; height: 25px;
+            background-color: #3498db;
+            border: 1px solid #2980b9;
+            border-radius: 3px;
+            z-index: 12;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Smart Traffic Management System</h1>
+
+    <div class="controls">
+        <button id="startButton" onclick="startSimulation()">Start</button>
+        <button id="stopButton" onclick="stopSimulation()">Stop</button>
+        <button id="panicButton" onclick="triggerPanicStop()">Panic Stop</button>
+        <button class="emergency-spawn" id="spawnAmbulanceButton" onclick="spawnEmergencyVehicle('ambulance')">Spawn Ambulance</button>
+        <button class="emergency-spawn" id="spawnFiretruckButton" onclick="spawnEmergencyVehicle('firetruck')">Spawn Fire Truck</button>
+        <button class="pedestrian-request" id="pedestrianRequestButton" onclick="requestPedestrianCrossing()">Request Crosswalk</button>
+    </div>
+
+    <div class="intersection-container">
+        <div class="intersection">
+            <div class="road horizontal"><div class="road-line-segment"></div></div>
+            <div class="road vertical"><div class="road-line-segment"></div></div>
+            <div class="zebra-crossing">
+                <div class="zebra-stripe"></div><div class="zebra-stripe"></div>
+                <div class="zebra-stripe"></div><div class="zebra-stripe"></div>
+            </div>
+            <div class="traffic-light" id="north-light"></div><div class="traffic-light" id="south-light"></div>
+            <div class="traffic-light" id="east-light"></div><div class="traffic-light" id="west-light"></div>
+            <div id="vehicle-container"></div>
+            <div id="pedestrian-container"></div>
+        </div>
+    </div>
+
+    <script>
+        
+        const greenDuration = 7000;
+        const yellowDuration = 2000;
+        const allRedDuration = 1000;
+        const pedestrianCrossDuration = 8000;
+        const vehicleSpeed = 1.5;
+        const pedestrianSpeed = 0.8;
+        const vehicleSpawnRate = 2200; 
+        const carSafetyBuffer = 8; 
+        const evSafetyBuffer = 20;
+        const pedStopBuffer = 10; 
+        const INTERSECTION_SIZE = 500;
+        const ROAD_THICKNESS = 120;
+        const INTERSECTION_START_COORD = (INTERSECTION_SIZE - ROAD_THICKNESS) / 2; 
+        const INTERSECTION_END_COORD = INTERSECTION_START_COORD + ROAD_THICKNESS;   
+
+        
+        let lightElements = {};
+        let currentPhase = 0;
+        let phaseTimeoutId = null;
+
+        let activeVehicles = [];
+        let activeEmergencyVehicles = [];
+        let activePedestrian = null;
+        let vehicleIdCounter = 0;
+
+        let animationFrameId = null;
+        let vehicleSpawnIntervalId = null;
+
+        const vehicleDimensions = { NS: { width: 18, height: 30 }, EW: { width: 30, height: 18 } };
+
+        const laneCenterOffsetNS_WestLane = ROAD_THICKNESS / 4; // For S-bound
+        const laneCenterOffsetNS_EastLane = ROAD_THICKNESS * 0.75; // For N-bound
+        const laneCenterOffsetEW_NorthLane = ROAD_THICKNESS / 4; // For W-bound
+        const laneCenterOffsetEW_SouthLane = ROAD_THICKNESS * 0.75; // For E-bound
+
+        spawnPoints = {
+            N: { x: INTERSECTION_START_COORD + laneCenterOffsetNS_WestLane - vehicleDimensions.NS.width / 2, y: -vehicleDimensions.NS.height - 10, direction: 'S' },
+            S: { x: INTERSECTION_START_COORD + laneCenterOffsetNS_EastLane - vehicleDimensions.NS.width / 2, y: INTERSECTION_SIZE + 10, direction: 'N' },
+            W: { x: -vehicleDimensions.EW.width - 10, y: INTERSECTION_START_COORD + laneCenterOffsetEW_SouthLane - vehicleDimensions.EW.height / 2, direction: 'E' },
+            E: { x: INTERSECTION_SIZE + 10, y: INTERSECTION_START_COORD + laneCenterOffsetEW_NorthLane - vehicleDimensions.EW.height / 2, direction: 'W' }
+        };
+
+        const stoppingPoints = {
+            S_bound_stop_y: INTERSECTION_START_COORD - 5, // For S-bound traffic at North light
+            N_bound_stop_y: INTERSECTION_END_COORD + 5,   // For N-bound traffic at South light
+            E_bound_stop_x: INTERSECTION_START_COORD - 5, // For E-bound traffic at West light
+            W_bound_stop_x: INTERSECTION_END_COORD + 5    // For W-bound traffic at East light
+        };
+
+        const ZEBRA_VISUAL_TOP = INTERSECTION_END_COORD + 5; 
+        const ZEBRA_VISUAL_HEIGHT = 40; 
+        const zebraY = ZEBRA_VISUAL_TOP + ZEBRA_VISUAL_HEIGHT / 2; 
+        const zebraStartX = INTERSECTION_START_COORD;
+        const zebraEndX = INTERSECTION_END_COORD;
+
+
+        let emergencyModeActive = false;
+        let prioritizedEV = null;
+        let pedestrianPhaseActive = false;
+        let pedestrianWaiting = false;
+        let normalCycleSnapshot = { phase: 0, timeLeft: 0 };
+
+        
+        function initializeLightElements() {
+            lightElements.N = document.getElementById('north-light'); lightElements.S = document.getElementById('south-light');
+            lightElements.E = document.getElementById('east-light');  lightElements.W = document.getElementById('west-light');
+        }
+
+        window.onload = () => {
+            initializeLightElements(); setAllLightsRed();
+            ['stopButton', 'panicButton', 'spawnAmbulanceButton', 'spawnFiretruckButton', 'pedestrianRequestButton'].forEach(id => document.getElementById(id).disabled = true);
+
+            const hRoadSeg = document.querySelector('.road.horizontal .road-line-segment');
+            const vRoadSeg = document.querySelector('.road.vertical .road-line-segment');
+            for(let i=0; i<10; i++) {
+                const hDash = document.createElement('div'); hDash.className = 'road-line horizontal-line';
+                if(hRoadSeg) hRoadSeg.appendChild(hDash.cloneNode());
+                const vDash = document.createElement('div'); vDash.className = 'road-line vertical-line';
+                if(vRoadSeg) vRoadSeg.appendChild(vDash.cloneNode());
+            }
+        };
+
+        
+        function setLightColor(lightId, color) { if (lightElements[lightId]) lightElements[lightId].style.backgroundColor = color; }
+        function setAllLightsRed() { ['N', 'S', 'E', 'W'].forEach(id => setLightColor(id, 'red')); }
+
+        function cycleLights() {
+            if (emergencyModeActive || pedestrianPhaseActive) return;
+            clearTimeout(phaseTimeoutId);
+            let duration = greenDuration;
+
+            if (pedestrianWaiting && !emergencyModeActive && currentPhase !== 2 && currentPhase !==5) {
+                if (currentPhase === 1 || currentPhase === 4) {
+                     setTimeout(activatePedestrianPhase, (normalCycleSnapshot.timeLeft || yellowDuration) + allRedDuration);
+                } else { 
+                    activatePedestrianPhase(); 
+                }
+                return;
+            }
+
+            switch (currentPhase) {
+                case 0: setLightColor('N', 'green'); setLightColor('S', 'green'); setLightColor('E', 'red');   setLightColor('W', 'red'); duration = greenDuration; break;
+                case 1: setLightColor('N', 'yellow');setLightColor('S', 'yellow');setLightColor('E', 'red');   setLightColor('W', 'red'); duration = yellowDuration; break;
+                case 2: setAllLightsRed(); duration = allRedDuration; break;
+                case 3: setLightColor('E', 'green'); setLightColor('W', 'green'); setLightColor('N', 'red');   setLightColor('S', 'red'); duration = greenDuration; break;
+                case 4: setLightColor('E', 'yellow');setLightColor('W', 'yellow');setLightColor('N', 'red');   setLightColor('S', 'red'); duration = yellowDuration; break;
+                case 5: setAllLightsRed(); duration = allRedDuration; break;
+            }
+            normalCycleSnapshot = { phase: currentPhase, timeLeft: duration };
+            phaseTimeoutId = setTimeout(() => { currentPhase = (currentPhase + 1) % 6; cycleLights(); }, duration);
+        }
+
+        
+        function spawnVehicle(isEmergency = false, type = null) {
+             if (!isSimulationRunning() && !isEmergency && !pedestrianPhaseActive && !emergencyModeActive) {
+                 if (isEmergency) {  }
+                 else return;
+            }
+
+            const spawnKeys = Object.keys(spawnPoints);
+            const randomSpawnKey = spawnKeys[Math.floor(Math.random() * spawnKeys.length)];
+            const sp = spawnPoints[randomSpawnKey];
+
+            const vehicle = document.createElement('div');
+            vehicle.id = vehicle-${vehicleIdCounter++};
+
+            let x = sp.x; let y = sp.y;
+            let width, height, className, textContent = '';
+            const travelingDirection = sp.direction;
+
+            if (travelingDirection === 'N' || travelingDirection === 'S') { width = vehicleDimensions.NS.width; height = vehicleDimensions.NS.height; }
+            else { width = vehicleDimensions.EW.width; height = vehicleDimensions.EW.height; }
+
+            if (isEmergency) {
+                className = 'vehicle emergency-vehicle ';
+                if (type === 'ambulance') { className += 'ambulance'; textContent = 'A'; }
+                else if (type === 'firetruck') { className += 'firetruck'; textContent = 'F'; }
+                if (prioritizedEV && emergencyModeActive) { console.log("Emergency mode active for another EV, new EV spawn queued."); }
+            } else { className = 'vehicle'; }
+
+            vehicle.className = className;
+            vehicle.style.width = ${width}px; vehicle.style.height = ${height}px;
+            vehicle.style.left = ${x}px; vehicle.style.top = ${y}px;
+            vehicle.style.backgroundColor = isEmergency ? '' : hsl(${Math.random() * 360}, 70%, 50%);
+            if(textContent) vehicle.textContent = textContent;
+
+            document.getElementById('vehicle-container').appendChild(vehicle);
+
+            const newVehicleData = {
+                id: vehicle.id, element: vehicle, x, y, width, height,
+                direction: travelingDirection, spawnKey: randomSpawnKey,
+                speed: (isEmergency ? vehicleSpeed * 1.7 : vehicleSpeed) + (Math.random() * 0.3 - 0.15), 
+                isStopped: false, isEmergency: isEmergency, type: type
+            };
+
+            if (isEmergency) {
+                activeEmergencyVehicles.push(newVehicleData);
+                if (!emergencyModeActive && !pedestrianPhaseActive && !prioritizedEV) {
+                    prioritizedEV = newVehicleData;
+                    activateEmergencyMode(newVehicleData.direction);
+                }
+            } else { activeVehicles.push(newVehicleData); }
+        }
+
+        // --- VEHICLE MOVEMENT & LOGIC ---
+        function getLightForVehicle(vehicle) {
+            let lightId;
+            switch (vehicle.spawnKey) { 
+                case 'N': lightId = 'N'; break; 
+                case 'S': lightId = 'S'; break; 
+                case 'E': lightId = 'E'; break; 
+                case 'W': lightId = 'W'; break; 
+            }
+            return lightElements[lightId] ? lightElements[lightId].style.backgroundColor : 'red';
+        }
+
+        function updateVehicleList(list, allOtherVehicles) {
+            return list.filter(v => {
+                let isCurrentPrioritizedEV = v.isEmergency && v === prioritizedEV;
+                let canMoveThisTick = !v.isStopped; 
+                let targetX = v.x;
+                let targetY = v.y;
+
+                if (canMoveThisTick || (isCurrentPrioritizedEV && emergencyModeActive)) { 
+                    switch (v.direction) {
+                        case 'S': targetY += v.speed; break;
+                        case 'N': targetY -= v.speed; break;
+                        case 'E': targetX += v.speed; break;
+                        case 'W': targetX -= v.speed; break;
+                    }
+                    if (isCurrentPrioritizedEV) canMoveThisTick = true; 
+                }
+
+                if (isCurrentPrioritizedEV && emergencyModeActive) {
+                    v.isStopped = false; 
+                    for (const otherV of allOtherVehicles) {
+                        if (v === otherV) continue; 
+                        let collisionImminentEV = false;
+                        let safetyDist = evSafetyBuffer;
+                        if (v.direction === 'S' && otherV.spawnKey === v.spawnKey && Math.abs(v.x - otherV.x) < v.width / 2 && otherV.y > v.y && (otherV.y - (v.y + v.height)) < safetyDist) { collisionImminentEV = true; }
+                        else if (v.direction === 'N' && otherV.spawnKey === v.spawnKey && Math.abs(v.x - otherV.x) < v.width / 2 && otherV.y < v.y && (v.y - (otherV.y + otherV.height)) < safetyDist) { collisionImminentEV = true; }
+                        else if (v.direction === 'E' && otherV.spawnKey === v.spawnKey && Math.abs(v.y - otherV.y) < v.height / 2 && otherV.x > v.x && (otherV.x - (v.x + v.width)) < safetyDist) { collisionImminentEV = true; }
+                        else if (v.direction === 'W' && otherV.spawnKey === v.spawnKey && Math.abs(v.y - otherV.y) < v.height / 2 && otherV.x < v.x && (v.x - (otherV.x + otherV.width)) < safetyDist) { collisionImminentEV = true; }
+                        if (collisionImminentEV) { v.isStopped = true; canMoveThisTick = false; targetX = v.x; targetY = v.y; break; }
+                    }
+                } else if (emergencyModeActive) { // For NON-PRIORITIZED vehicles during emergency
+                    const ev = prioritizedEV;
+                    let mustFreezeInEVPath = false;
+
+                    if (ev && v.spawnKey !== ev.spawnKey) { 
+                        let evPathXMin, evPathXMax, evPathYMin, evPathYMax;
+                        const roadLaneWidth = ROAD_THICKNESS / 2; 
+                        const safetyIntersectionMargin = 5; 
+
+                        
+                        if (ev.direction === 'S') { 
+                            evPathXMin = INTERSECTION_START_COORD - safetyIntersectionMargin;
+                            evPathXMax = INTERSECTION_START_COORD + roadLaneWidth + safetyIntersectionMargin;
+                            evPathYMin = INTERSECTION_START_COORD - safetyIntersectionMargin;
+                            evPathYMax = INTERSECTION_END_COORD + safetyIntersectionMargin;
+                        } else if (ev.direction === 'N') { 
+                            evPathXMin = INTERSECTION_START_COORD + roadLaneWidth - safetyIntersectionMargin;
+                            evPathXMax = INTERSECTION_END_COORD + safetyIntersectionMargin;
+                            evPathYMin = INTERSECTION_START_COORD - safetyIntersectionMargin;
+                            evPathYMax = INTERSECTION_END_COORD + safetyIntersectionMargin;
+                        } else if (ev.direction === 'E') { 
+                            evPathYMin = INTERSECTION_START_COORD + roadLaneWidth - safetyIntersectionMargin;
+                            evPathYMax = INTERSECTION_END_COORD + safetyIntersectionMargin;
+                            evPathXMin = INTERSECTION_START_COORD - safetyIntersectionMargin;
+                            evPathXMax = INTERSECTION_END_COORD + safetyIntersectionMargin;
+                        } else { 
+                            evPathYMin = INTERSECTION_START_COORD - safetyIntersectionMargin;
+                            evPathYMax = INTERSECTION_START_COORD + roadLaneWidth + safetyIntersectionMargin;
+                            evPathXMin = INTERSECTION_START_COORD - safetyIntersectionMargin;
+                            evPathXMax = INTERSECTION_END_COORD + safetyIntersectionMargin;
+                        }
+
+                        const vRight = v.x + v.width;
+                        const vBottom = v.y + v.height;
+                        const vInEVPathBox = (v.x < evPathXMax && vRight > evPathXMin && v.y < evPathYMax && vBottom > evPathYMin);
+
+                        if (vInEVPathBox) {
+                            mustFreezeInEVPath = true;
+                        }
+                    }
+
+                    if (mustFreezeInEVPath) {
+                        v.isStopped = true;
+                        canMoveThisTick = false;
+                        targetX = v.x; targetY = v.y; 
+                      
+                    } else {
+                        
+                        const lightColor = getLightForVehicle(v);
+                        if (lightColor === 'red' || lightColor === 'yellow') {
+                            v.isStopped = true;
+                            targetX = v.x; targetY = v.y; 
+
+                            let stopLine, currentFront, intendedFrontBasedOnStep;
+                            let shouldMoveToExactStopLine = false;
+                            
+                            
+                            if (v.direction === 'S') { stopLine = stoppingPoints.S_bound_stop_y; currentFront = v.y + v.height; intendedFrontBasedOnStep = targetY + v.height; if (currentFront < stopLine && intendedFrontBasedOnStep >= stopLine) { targetY = stopLine - v.height; shouldMoveToExactStopLine = true;}}
+                            else if (v.direction === 'N') { stopLine = stoppingPoints.N_bound_stop_y; currentFront = v.y; intendedFrontBasedOnStep = targetY; if (currentFront > stopLine && intendedFrontBasedOnStep <= stopLine) { targetY = stopLine; shouldMoveToExactStopLine = true;}}
+                            else if (v.direction === 'E') { stopLine = stoppingPoints.E_bound_stop_x; currentFront = v.x + v.width; intendedFrontBasedOnStep = targetX + v.width; if (currentFront < stopLine && intendedFrontBasedOnStep >= stopLine) { targetX = stopLine - v.width; shouldMoveToExactStopLine = true;}}
+                            else if (v.direction === 'W') { stopLine = stoppingPoints.W_bound_stop_x; currentFront = v.x; intendedFrontBasedOnStep = targetX; if (currentFront > stopLine && intendedFrontBasedOnStep <= stopLine) { targetX = stopLine; shouldMoveToExactStopLine = true;}}
+
+                            if(shouldMoveToExactStopLine) {
+                                 canMoveThisTick = true; 
+                            } else {
+                                 canMoveThisTick = false; 
+                                 targetX = v.x; targetY = v.y; 
+                            }
+                        } else { 
+                            v.isStopped = false; 
+                            
+                            
+                            for (const otherV of allOtherVehicles) {
+                                if (v === otherV || v.spawnKey !== otherV.spawnKey) continue;
+                                let collisionImminent = false;
+                                if (v.direction === 'S' && otherV.y > v.y && Math.abs(v.x-otherV.x) < v.width/2 && (targetY + v.height + carSafetyBuffer) > otherV.y) collisionImminent = true;
+                                else if (v.direction === 'N' && otherV.y < v.y && Math.abs(v.x-otherV.x) < v.width/2 && (targetY - carSafetyBuffer) < (otherV.y + otherV.height)) collisionImminent = true;
+                                else if (v.direction === 'E' && otherV.x > v.x && Math.abs(v.y-otherV.y) < v.height/2 && (targetX + v.width + carSafetyBuffer) > otherV.x) collisionImminent = true;
+                                else if (v.direction === 'W' && otherV.x < v.x && Math.abs(v.y-otherV.y) < v.height/2 && (targetX - carSafetyBuffer) < (otherV.x + otherV.width)) collisionImminent = true;
+                                if (collisionImminent) { v.isStopped = true; canMoveThisTick = false; targetX = v.x; targetY = v.y; break; }
+                            }
+                        }
+                    }
+                } else if (pedestrianPhaseActive) { 
+                    v.isStopped = true; 
+                    canMoveThisTick = false;
+                    let pedStopTargetX = v.x;
+                    let pedStopTargetY = v.y;
+                    let hasReachedPedStop = false;
+
+                    if (v.direction === 'S') {
+                        const stopLineY = ZEBRA_VISUAL_TOP - pedStopBuffer - v.height; 
+                        if (v.y + v.height >= stopLineY) { hasReachedPedStop = true; pedStopTargetY = stopLineY; } 
+                        else if (targetY + v.height >= stopLineY) { pedStopTargetY = stopLineY; canMoveThisTick = true; } 
+                        else { canMoveThisTick = true; v.isStopped = false; } 
+                    } else if (v.direction === 'N') {
+                        const stopLineY = ZEBRA_VISUAL_TOP + ZEBRA_VISUAL_HEIGHT + pedStopBuffer; 
+                        if (v.y <= stopLineY) { hasReachedPedStop = true; pedStopTargetY = stopLineY; }
+                        else if (targetY <= stopLineY) { pedStopTargetY = stopLineY; canMoveThisTick = true; }
+                        else { canMoveThisTick = true; v.isStopped = false; }
+                    } else if (v.direction === 'E') { 
+                        const stopLineX = stoppingPoints.E_bound_stop_x; 
+                        if (v.x + v.width >= stopLineX) { hasReachedPedStop = true; pedStopTargetX = stopLineX - v.width; }
+                        else if (targetX + v.width >= stopLineX) { pedStopTargetX = stopLineX - v.width; canMoveThisTick = true; }
+                        else { canMoveThisTick = true; v.isStopped = false; }
+                    } else if (v.direction === 'W') {
+                        const stopLineX = stoppingPoints.W_bound_stop_x;
+                        if (v.x <= stopLineX) { hasReachedPedStop = true; pedStopTargetX = stopLineX; }
+                        else if (targetX <= stopLineX) { pedStopTargetX = stopLineX; canMoveThisTick = true; }
+                        else { canMoveThisTick = true; v.isStopped = false; }
+                    }
+
+                    targetX = pedStopTargetX;
+                    targetY = pedStopTargetY;
+
+                    if (hasReachedPedStop) { v.isStopped = true; canMoveThisTick = (v.x !== targetX || v.y !== targetY); } 
+                    else if (canMoveThisTick) { 
+                        v.isStopped = false;
+                        for (const otherV of allOtherVehicles) {
+                            if (v === otherV || v.spawnKey !== otherV.spawnKey) continue;
+                            let collisionImminent = false;
+                            if (v.direction === 'S' && otherV.y > v.y && Math.abs(v.x-otherV.x) < v.width/2 && (targetY + v.height + carSafetyBuffer) > otherV.y) collisionImminent = true;
+                            else if (v.direction === 'N' && otherV.y < v.y && Math.abs(v.x-otherV.x) < v.width/2 && (targetY - carSafetyBuffer) < (otherV.y + otherV.height)) collisionImminent = true;
+                            else if (v.direction === 'E' && otherV.x > v.x && Math.abs(v.y-otherV.y) < v.height/2 && (targetX + v.width + carSafetyBuffer) > otherV.x) collisionImminent = true;
+                            else if (v.direction === 'W' && otherV.x < v.x && Math.abs(v.y-otherV.y) < v.height/2 && (targetX - carSafetyBuffer) < (otherV.x + otherV.width)) collisionImminent = true;
+                            if (collisionImminent) { v.isStopped = true; canMoveThisTick = false; targetX = v.x; targetY = v.y; break; }
+                        }
+                    }
+                } else { 
+                    if (v.isStopped) { 
+                        const lightColor = getLightForVehicle(v);
+                        if (lightColor === 'green') {
+                            v.isStopped = false; canMoveThisTick = true;
+                            switch (v.direction) {
+                                case 'S': targetY = v.y + v.speed; break; case 'N': targetY = v.y - v.speed; break;
+                                case 'E': targetX = v.x + v.speed; break; case 'W': targetX = v.x - v.speed; break;
+                            }
+                        } else { canMoveThisTick = false; }
+                    }
+
+                    if (canMoveThisTick) { 
+                        const lightColor = getLightForVehicle(v);
+                        if (lightColor !== 'green') {
+                            let stopLine, currentFront, intendedFront;
+                            let shouldStopForLight = false;
+                            if (v.direction === 'S') { stopLine = stoppingPoints.S_bound_stop_y; currentFront = v.y + v.height; intendedFront = targetY + v.height; if (currentFront < stopLine && intendedFront >= stopLine) { targetY = stopLine - v.height; shouldStopForLight = true;}}
+                            else if (v.direction === 'N') { stopLine = stoppingPoints.N_bound_stop_y; currentFront = v.y; intendedFront = targetY; if (currentFront > stopLine && intendedFront <= stopLine) { targetY = stopLine; shouldStopForLight = true;}}
+                            else if (v.direction === 'E') { stopLine = stoppingPoints.E_bound_stop_x; currentFront = v.x + v.width; intendedFront = targetX + v.width; if (currentFront < stopLine && intendedFront >= stopLine) { targetX = stopLine - v.width; shouldStopForLight = true;}}
+                            else if (v.direction === 'W') { stopLine = stoppingPoints.W_bound_stop_x; currentFront = v.x; intendedFront = targetX; if (currentFront > stopLine && intendedFront <= stopLine) { targetX = stopLine; shouldStopForLight = true;}}
+
+                            if (shouldStopForLight) { v.isStopped = true; }
+                        }
+                    }
+
+                    if (canMoveThisTick && !v.isStopped) { 
+                        for (const otherV of allOtherVehicles) {
+                            if (v === otherV || v.spawnKey !== otherV.spawnKey) continue;
+                            let collisionImminent = false;
+                            if (v.direction === 'S' && otherV.y > v.y && Math.abs(v.x-otherV.x) < v.width/2 && (targetY + v.height + carSafetyBuffer) > otherV.y) collisionImminent = true;
+                            else if (v.direction === 'N' && otherV.y < v.y && Math.abs(v.x-otherV.x) < v.width/2 && (targetY - carSafetyBuffer) < (otherV.y + otherV.height)) collisionImminent = true;
+                            else if (v.direction === 'E' && otherV.x > v.x && Math.abs(v.y-otherV.y) < v.height/2 && (targetX + v.width + carSafetyBuffer) > otherV.x) collisionImminent = true;
+                            else if (v.direction === 'W' && otherV.x < v.x && Math.abs(v.y-otherV.y) < v.height/2 && (targetX - carSafetyBuffer) < (otherV.x + otherV.width)) collisionImminent = true;
+                            if (collisionImminent) { v.isStopped = true; canMoveThisTick = false; targetX = v.x; targetY = v.y; break; }
+                        }
+                    }
+                }
+
+                if (canMoveThisTick) {
+                    v.x = targetX;
+                    v.y = targetY;
+                } else { 
+                     if (v.x !== targetX || v.y !== targetY) { 
+                        v.x = targetX;
+                        v.y = targetY;
+                    }
+                }
+                v.element.style.top = ${v.y}px;
+                v.element.style.left = ${v.x}px;
+
+                if (v.isEmergency && v === prioritizedEV && emergencyModeActive) { 
+                    const iCenterY = INTERSECTION_SIZE / 2; const iCenterX = INTERSECTION_SIZE / 2; const clearDist = 80; let cleared = false;
+                    if (v.direction === 'S' && v.y > iCenterY + clearDist) cleared = true;
+                    else if (v.direction === 'N' && v.y < iCenterY - v.height - clearDist) cleared = true;
+                    else if (v.direction === 'E' && v.x > iCenterX + clearDist) cleared = true;
+                    else if (v.direction === 'W' && v.x < iCenterX - v.width - clearDist) cleared = true;
+                    if (cleared) { deactivateEmergencyMode(); }
+                }
+
+                if (v.y > INTERSECTION_SIZE + 50 || v.y < -100 || v.x > INTERSECTION_SIZE + 50 || v.x < -100) {
+                    v.element.remove();
+                    if (v.isEmergency && v === prioritizedEV) { deactivateEmergencyMode(); }
+                    return false;
+                }
+                return true;
+            });
+        }
+
+
+        function updatePedestrian() {
+            if (!activePedestrian || !pedestrianPhaseActive) return;
+            activePedestrian.x += activePedestrian.speed * activePedestrian.direction;
+            activePedestrian.element.style.left = ${activePedestrian.x}px;
+            if ((activePedestrian.direction === 1 && activePedestrian.x >= zebraEndX - activePedestrian.width) ||
+                (activePedestrian.direction === -1 && activePedestrian.x <= zebraStartX)) {
+                deactivatePedestrianPhase();
+            }
+        }
+
+        //MAIN SIMULATION LOOP 
+        function mainLoop() {
+            const allCurrentVehicles = [...activeVehicles, ...activeEmergencyVehicles];
+            activeVehicles = updateVehicleList(activeVehicles, allCurrentVehicles);
+            activeEmergencyVehicles = updateVehicleList(activeEmergencyVehicles, allCurrentVehicles);
+            updatePedestrian();
+
+            if (isSimulationRunning()) {
+                animationFrameId = requestAnimationFrame(mainLoop);
+            }
+        }
+
+        function isSimulationRunning() { return phaseTimeoutId !== null || emergencyModeActive || pedestrianPhaseActive || animationFrameId !== null ; }
+
+        //SPECIAL PHASES (EMERGENCY, PEDESTRIAN
+        function activateEmergencyMode(evTravelDirection) {
+            if (emergencyModeActive && prioritizedEV) return; 
+            if (pedestrianPhaseActive) { 
+                console.log("Pedestrian phase active, EV mode deferred. EV will activate after pedestrian phase.");
+                
+                return; 
+            }
+
+            emergencyModeActive = true;
+            clearTimeout(phaseTimeoutId); phaseTimeoutId = null; 
+            console.log(Emergency Mode Activated for EV traveling: ${evTravelDirection});
+            setAllLightsRed(); 
+
+            if (evTravelDirection === 'S') { setLightColor('N', 'green'); } 
+            else if (evTravelDirection === 'N') { setLightColor('S', 'green'); } 
+            else if (evTravelDirection === 'E') { setLightColor('W', 'green'); } 
+            else if (evTravelDirection === 'W') { setLightColor('E', 'green'); } 
+
+            ['spawnAmbulanceButton', 'spawnFiretruckButton', 'pedestrianRequestButton'].forEach(id => document.getElementById(id).disabled = true);
+            document.getElementById('startButton').disabled = true;
+            document.getElementById('stopButton').disabled = false; 
+            document.getElementById('panicButton').disabled = false; 
+
+            if (!animationFrameId) { 
+                animationFrameId = requestAnimationFrame(mainLoop);
+            }
+        }
+
+        function deactivateEmergencyMode() {
+            if (!emergencyModeActive) return;
+            console.log("Deactivating Emergency Mode for the current EV.");
+            emergencyModeActive = false;
+            const formerEV = prioritizedEV;
+            prioritizedEV = null; 
+
+            // Check for another EV waiting
+            const nextEV = activeEmergencyVehicles.find(ev => ev !== formerEV && ev.element); 
+            if (nextEV && !pedestrianPhaseActive) {
+                console.log("Another EV waiting, activating emergency mode for it.");
+                prioritizedEV = nextEV;
+                activateEmergencyMode(nextEV.direction);
+            } else {
+                console.log("Resuming normal operations or handling pedestrian phase if pending.");
+                setAllLightsRed(); 
+                if (pedestrianWaiting && !pedestrianPhaseActive) { 
+                    console.log("Pedestrian was waiting, activating pedestrian phase now.");
+                    activatePedestrianPhase(); 
+                } else if (!pedestrianPhaseActive) { 
+                    currentPhase = 5; 
+                    phaseTimeoutId = setTimeout(() => { currentPhase = 0; cycleLights(); }, allRedDuration);
+                     
+                    document.getElementById('startButton').disabled = true;
+                    document.getElementById('stopButton').disabled = false;
+                    document.getElementById('panicButton').disabled = false;
+                    ['spawnAmbulanceButton', 'spawnFiretruckButton', 'pedestrianRequestButton'].forEach(id => document.getElementById(id).disabled = false);
+                }
+                
+            }
+        }
+
+        function requestPedestrianCrossing() {
+            if (activePedestrian || pedestrianWaiting || pedestrianPhaseActive) { console.log("Pedestrian crossing request ignored (already active/waiting)."); return; }
+            
+            pedestrianWaiting = true;
+            document.getElementById('pedestrianRequestButton').disabled = true;
+            console.log("Pedestrian crossing requested.");
+
+            if (emergencyModeActive) { 
+                console.log("Emergency mode active. Pedestrian will cross after EV clears.");
+                return; 
+            }
+
+            if(!isSimulationRunning()){ 
+                startSimulation(); 
+            } else { 
+                clearTimeout(phaseTimeoutId); 
+                
+                // Determine current light color to transition smoothly
+                let lightsNSGreen = lightElements.N.style.backgroundColor === 'green';
+                let lightsEWGreen = lightElements.E.style.backgroundColor === 'green';
+                let lightsNSYellow = lightElements.N.style.backgroundColor === 'yellow';
+                let lightsEWYellow = lightElements.E.style.backgroundColor === 'yellow';
+
+                if (lightsNSGreen || lightsEWGreen) { 
+                    let yellowTimeLeft = greenDuration - (normalCycleSnapshot.timeLeft || 0) > 0 ? yellowDuration : normalCycleSnapshot.timeLeft - allRedDuration; 
+                    if(lightsNSGreen) { setLightColor('N', 'yellow'); setLightColor('S', 'yellow'); currentPhase = 1;}
+                    else {setLightColor('E', 'yellow'); setLightColor('W', 'yellow'); currentPhase = 4;}
+                    phaseTimeoutId = setTimeout(() => {
+                        setAllLightsRed();
+                        currentPhase = (currentPhase === 1) ? 2 : 5;
+                        phaseTimeoutId = setTimeout(activatePedestrianPhase, allRedDuration);
+                    }, yellowDuration);
+                } else if (lightsNSYellow || lightsEWYellow) { 
+                     let timeLeftInYellow = normalCycleSnapshot.timeLeft || yellowDuration;
+                     phaseTimeoutId = setTimeout(() => {
+                        setAllLightsRed();
+                        currentPhase = (lightsNSYellow) ? 2 : 5;
+                        phaseTimeoutId = setTimeout(activatePedestrianPhase, allRedDuration);
+                    }, timeLeftInYellow);
+                } else { 
+                    activatePedestrianPhase();
+                }
+            }
+        }
+
+        function activatePedestrianPhase() {
+            if (pedestrianPhaseActive || emergencyModeActive) {
+                if(emergencyModeActive) pedestrianWaiting = true; 
+                return;
+            }
+            console.log("Activating Pedestrian Phase.");
+            pedestrianPhaseActive = true; pedestrianWaiting = false;
+            clearTimeout(phaseTimeoutId); phaseTimeoutId = null;
+            setAllLightsRed();
+
+            const pElement = document.createElement('div');
+            pElement.className = 'pedestrian'; pElement.textContent = 'P';
+            const pedestrianHeight = 25;
+            pElement.style.left = ${zebraStartX}px;
+            pElement.style.top = ${zebraY - pedestrianHeight/2}px;
+            document.getElementById('pedestrian-container').appendChild(pElement);
+            activePedestrian = {
+                element: pElement, x: zebraStartX, y: zebraY - pedestrianHeight/2,
+                width: 15, height: pedestrianHeight, speed: pedestrianSpeed, direction: 1
+            };
+            // Disable most controls during pedestrian phase
+            ['spawnAmbulanceButton', 'spawnFiretruckButton', 'startButton', 'panicButton', 'pedestrianRequestButton'].forEach(id => document.getElementById(id).disabled = true);
+            document.getElementById('stopButton').disabled = false; 
+
+            if (!animationFrameId) { 
+                animationFrameId = requestAnimationFrame(mainLoop);
+            }
+           
+            phaseTimeoutId = setTimeout(deactivatePedestrianPhase, pedestrianCrossDuration);
+        }
+
+        function deactivatePedestrianPhase() {
+            if (!pedestrianPhaseActive) return;
+            clearTimeout(phaseTimeoutId); phaseTimeoutId = null; 
+            console.log("Deactivating Pedestrian Phase.");
+            pedestrianPhaseActive = false;
+            if (activePedestrian) { activePedestrian.element.remove(); activePedestrian = null; }
+
+            
+            const nextEV = activeEmergencyVehicles.find(ev => ev.element && (!prioritizedEV || ev !== prioritizedEV));
+            if (nextEV) {
+                console.log("EV was waiting or spawned, activating emergency mode for it post-pedestrian.");
+                prioritizedEV = nextEV;
+                activateEmergencyMode(nextEV.direction);
+            } else {
+                console.log("Resuming normal traffic cycle post-pedestrian.");
+                setAllLightsRed();
+                currentPhase = 5; 
+                phaseTimeoutId = setTimeout(() => { currentPhase = 0; cycleLights(); }, allRedDuration);
+
+                
+                const simShouldContinue = !document.getElementById('stopButton').disabled || phaseTimeoutId != null;
+                if (simShouldContinue) { 
+                     document.getElementById('startButton').disabled = true;
+                     document.getElementById('stopButton').disabled = false;
+                     document.getElementById('panicButton').disabled = false;
+                     ['spawnAmbulanceButton', 'spawnFiretruckButton', 'pedestrianRequestButton'].forEach(id => document.getElementById(id).disabled = false);
+                } else { 
+                    document.getElementById('startButton').disabled = false;
+                   
+                }
+            }
+        }
+
+
+        //SIMULATION CONTROL BUTTONS 
+        function startSimulation() {
+            
+             if (animationFrameId) { 
+                console.log("Simulation already running or in a special phase.");
+               
+                document.getElementById('panicButton').disabled = false;
+                if (!emergencyModeActive && !pedestrianPhaseActive) {
+                    ['spawnAmbulanceButton', 'spawnFiretruckButton', 'pedestrianRequestButton'].forEach(id => document.getElementById(id).disabled = false);
+                }
+                return;
+            }
+
+
+            document.getElementById('startButton').disabled = true;
+            document.getElementById('stopButton').disabled = false;
+            document.getElementById('panicButton').disabled = false;
+            ['spawnAmbulanceButton', 'spawnFiretruckButton', 'pedestrianRequestButton'].forEach(id => document.getElementById(id).disabled = false);
+
+            initializeLightElements(); 
+            setAllLightsRed();
+            
+            
+            emergencyModeActive = false; prioritizedEV = null;
+            pedestrianPhaseActive = false; pedestrianWaiting = false;
+            if(activePedestrian) { activePedestrian.element.remove(); activePedestrian = null; }
+
+
+            currentPhase = 0; 
+            if (pedestrianWaiting) { 
+                activatePedestrianPhase();
+            } else {
+                cycleLights();
+            }
+
+
+            if (vehicleSpawnIntervalId) clearInterval(vehicleSpawnIntervalId);
+            vehicleSpawnIntervalId = setInterval(() => {
+                if (!pedestrianPhaseActive) spawnVehicle(false); 
+            }, vehicleSpawnRate);
+
+            
+
+            if (!animationFrameId) {
+                 animationFrameId = requestAnimationFrame(mainLoop);
+            }
+        }
+
+        function stopSimulationBase(freezeVehicles = false) {
+            clearTimeout(phaseTimeoutId); phaseTimeoutId = null;
+            clearInterval(vehicleSpawnIntervalId); vehicleSpawnIntervalId = null;
+            if (lightElements.N) { setAllLightsRed(); } 
+
+            if (!freezeVehicles) {
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
+                }
+            }
+           
+        }
+
+        function stopSimulation() { 
+            stopSimulationBase(false); 
+
+            emergencyModeActive = false; prioritizedEV = null;
+            pedestrianPhaseActive = false; pedestrianWaiting = false;
+            if(activePedestrian) { activePedestrian.element.remove(); activePedestrian = null; }
+
+            activeVehicles.forEach(v => v.element.remove()); activeVehicles = [];
+            activeEmergencyVehicles.forEach(v => v.element.remove()); activeEmergencyVehicles = [];
+            
+            document.getElementById('vehicle-container').innerHTML = ''; 
+            document.getElementById('pedestrian-container').innerHTML = '';
+
+
+            document.getElementById('startButton').disabled = false;
+            ['stopButton', 'panicButton', 'spawnAmbulanceButton', 'spawnFiretruckButton', 'pedestrianRequestButton'].forEach(id => document.getElementById(id).disabled = true);
+        }
+
+        function triggerPanicStop() { 
+            console.log("Panic Stop: All lights red. Vehicles freeze. Timers stopped.");
+            stopSimulationBase(true); 
+
+            
+            emergencyModeActive = false; 
+            pedestrianPhaseActive = false; 
+        
+
+            
+            activeVehicles.forEach(v => v.isStopped = true);
+            activeEmergencyVehicles.forEach(v => v.isStopped = true);
+            if (activePedestrian) {  }
+
+            setAllLightsRed();
+            document.getElementById('startButton').disabled = false; 
+            document.getElementById('stopButton').disabled = true;
+            ['panicButton', 'spawnAmbulanceButton', 'spawnFiretruckButton', 'pedestrianRequestButton'].forEach(id => document.getElementById(id).disabled = true);
+            
+            
+        }
+
+        function spawnEmergencyVehicle(type) {
+            let autoStartedSim = false;
+            if (!isSimulationRunning() && !emergencyModeActive && !pedestrianPhaseActive && !animationFrameId) {
+                console.log("Simulation not running. Starting simulation to spawn EV.");
+                startSimulation();
+                autoStartedSim = true;
+            }
+            
+            
+            setTimeout(() => {
+                spawnVehicle(true, type); 
+               
+            }, autoStartedSim ? 200 : 0);
+        }
+
+    </script>
+</body>
+</html>
